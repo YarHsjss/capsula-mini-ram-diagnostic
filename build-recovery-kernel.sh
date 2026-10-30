@@ -27,7 +27,7 @@ scripts/config --enable ARCH_MESON --enable SMP --set-val NR_CPUS 4 \
     --enable OF --enable PRINTK --enable TTY --enable SERIAL_MESON \
     --enable SERIAL_MESON_CONSOLE --enable SERIAL_EARLYCON \
     --enable BINFMT_ELF --enable BINFMT_SCRIPT --enable BLK_DEV_INITRD --enable RD_GZIP \
-    --enable PROC_FS --enable SYSFS --enable TMPFS --enable POSIX_TIMERS \
+    --enable PROC_FS --enable SYSFS --enable SHMEM --enable TMPFS --enable POSIX_TIMERS \
     --enable FUTEX --enable EPOLL --enable CONFIGFS_FS \
     --enable USB_SUPPORT --enable USB --enable USB_GADGET \
     --enable USB_DWC2 --enable USB_DWC2_DUAL_ROLE --enable USB_DWC3 \
@@ -53,9 +53,10 @@ values = dict(line.split('=', 1) for line in text.splitlines() if line.startswit
 for key in ['MTD','BLOCK','MMC','MODULES','NET','SOUND','I2C','SPI','CPU_FREQ','DEVTMPFS','NVMEM_MESON_EFUSE']:
     if values.get('CONFIG_' + key) in ('y', 'm'):
         raise SystemExit('Unsafe diagnostic configuration: '+key)
-for key in ['BLK_DEV_INITRD','RD_GZIP','BINFMT_ELF','BINFMT_SCRIPT','PROC_FS','SYSFS','TMPFS','USB_G_SERIAL','U_SERIAL_CONSOLE','USB_DWC2','ARCH_MESON','CMDLINE_FORCE']:
-    if values.get('CONFIG_' + key) != 'y':
-        raise SystemExit('Missing diagnostic requirement: '+key)
+required = ['BLK_DEV_INITRD','RD_GZIP','BINFMT_ELF','BINFMT_SCRIPT','PROC_FS','SYSFS','SHMEM','TMPFS','USB_G_SERIAL','U_SERIAL_CONSOLE','USB_DWC2','ARCH_MESON','CMDLINE_FORCE']
+missing = [key for key in required if values.get('CONFIG_' + key) != 'y']
+if missing:
+    raise SystemExit('Missing diagnostic requirements: '+', '.join(missing))
 if values.get('CONFIG_INITRAMFS_SOURCE') != '""':
     raise SystemExit('Unexpected built-in initramfs or fallback root configuration')
 args = values.get('CONFIG_CMDLINE', '').strip('"').split()
