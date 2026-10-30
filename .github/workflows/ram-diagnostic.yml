@@ -1,0 +1,50 @@
+{
+  "name": "RAM diagnostic kernel (not a flasher)",
+  "on": {
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "build": {
+      "if": "github.event.repository.private == false",
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 35,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Check RAM init scripts without execution",
+          "run": "bash -n ram-root/init\nbash -n ram-root/stock-status-readonly.sh"
+        },
+        {
+          "name": "Install build dependencies in ephemeral runner",
+          "run": "sudo apt-get update\nsudo apt-get install -y --no-install-recommends build-essential bc bison flex libssl-dev libelf-dev clang lld llvm python3"
+        },
+        {
+          "name": "Build public source only",
+          "env": {
+            "JARVIS_BUILD_WORKDIR": "${{ runner.temp }}/jarvis-ram-build",
+            "JARVIS_BUILD_JOBS": "3"
+          },
+          "run": "bash build-recovery-kernel.sh"
+        },
+        {
+          "name": "Collect candidate and matching source",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "ram-kernel-candidate-not-boot-verified",
+            "path": "${{ runner.temp }}/jarvis-ram-build/output/",
+            "retention-days": 1,
+            "if-no-files-found": "error"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/comp18man/vk-capsula-mini-a113x-linux.git",
+  "commit": "8d850405b091aaf217f8bb1bbdf22852f5cdb61e",
+  "reference_branch": "vk-mini-a113x",
+  "board_dts": "arch/arm64/boot/dts/amlogic/meson-axg-s420-marusia-mini.dts",
+  "purpose": "RAM diagnostic kernel; no persistent storage, network or sound",
+  "kernel_execution_approved": false,
+  "public_inputs_only": true
+}

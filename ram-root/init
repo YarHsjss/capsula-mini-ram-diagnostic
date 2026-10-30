@@ -1,0 +1,44 @@
+#!/bin/sh
+# Minimal diagnostic PID 1. Never hands off to factory init or persistent root.
+PATH=/bin
+export PATH
+umask 077
+
+idle_forever() {
+    while :; do
+        printf 'JARVIS RAM DIAGNOSTIC: waiting; no storage operation.\n'
+        /bin/busybox sleep 10
+    done
+}
+
+# rootfs and these directories come from the supplied initramfs.
+/bin/busybox mount -t proc -o ro,nosuid,nodev,noexec proc /proc || idle_forever
+/bin/busybox mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys || idle_forever
+# /dev contains only the three approved RAM-archive character nodes. Do not
+# mount devtmpfs: it would expose automatically discovered storage devices.
+exec </dev/console >/dev/console 2>&1
+
+printf '\nJARVIS RAM DIAGNOSTIC: INIT ENTERED\n'
+# This is a detection check, not the storage protection boundary. The kernel
+# and DTB must have storage disabled BEFORE boot; that is a separate host gate.
+storage_exposed=0
+if [ -r /proc/mtd ]; then
+    while IFS= read -r line; do
+        case "$line" in mtd[0-9]*:*) storage_exposed=1 ;; esac
+    done < /proc/mtd
+fi
+if [ "$storage_exposed" -ne 0 ]; then
+    printf 'STOP: MTD devices exposed; do not proceed. No storage command sent.\n'
+    idle_forever
+fi
+
+/bin/busybox mount -t tmpfs -o size=2m,mode=0755,nosuid,nodev tmpfs /run || idle_forever
+/bin/busybox mount -t tmpfs -o size=2m,mode=1777,nosuid,nodev tmpfs /tmp || idle_forever
+/bin/sh /usr/lib/jarvis/stock-status-readonly.sh >/run/jarvis-status.txt 2>&1
+while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; done </run/jarvis-status.txt
+printf '\nJARVIS RAM DIAGNOSTIC: IDLE. No network, recording, updater or factory init.\n'
+while :; do
+    /bin/busybox sleep 10
+    printf '\nJARVIS RAM DIAGNOSTIC: ALIVE\n'
+    while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; done </run/jarvis-status.txt
+done

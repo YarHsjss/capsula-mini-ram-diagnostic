@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+// Append to the pinned board source for the first diagnostic kernel only.
+// Kernel CONFIG_MTD=n and CONFIG_BLOCK=n are also mandatory; DTB alone is not enough.
+&nfc { status = "disabled"; };
+&sd_emmc_b { status = "disabled"; };
+&sd_emmc_c { status = "disabled"; };
+&i2c1 { status = "disabled"; };
+&i2c3 { status = "disabled"; };
+&spicc0 { status = "disabled"; };
+
+/ {
+    sound { status = "disabled"; };
+    chosen {
+        bootargs = "rdinit=/init init=/init root=/dev/ram0 ro console=ttyAML0,115200n8 console=ttyGS0,115200n8 loglevel=7 panic=0 maxcpus=1 cpufreq.off=1 clk_ignore_unused pd_ignore_unused regulator_ignore_unused";
+    };
+};
