@@ -10,9 +10,15 @@ configuration excludes MTD, block devices, MMC, module loading, networking and
 sound. CPU frequency scaling is disabled. The board source additionally disables
 storage and audio buses; USB serial is the intended future log transport.
 
-The output retains the original kernel header. No loader-specific address patch
-or boot command is guessed. Compatibility, reserved RAM, USB return/logging and
-the absence of any fallback factory init must be reviewed before execution.
+The inspected legacy U-Boot computes the destination as DRAM start plus the
+32-bit Image text_offset, ignoring the modern arbitrary-placement flag. A zero
+offset collides with the board's reserved first 16 MiB. The recipe changes only
+the load-offset field in arch/arm64/kernel/head.S to 0x02000000 before compiling;
+entry instructions and the header layout are preserved. The exact source patch
+is included as source-change.patch and the output is named Image.axg-legacy.
+No post-build binary patch or boot command is applied. USB return/logging,
+loader DTB fixups and the absence of any fallback factory init must be reviewed
+before execution. A static memory map is not proof that the image boots.
 No software from this recipe runs on the speaker or the Windows computer.
 
 To build in an approved Linux build environment with LLVM, Make, Python, Bison,

@@ -20,6 +20,18 @@ test "$(git -C "$work_dir/kernel" rev-parse HEAD)" = "$source_commit"
 cd "$work_dir/kernel"
 board_dts=arch/arm64/boot/dts/amlogic/meson-axg-s420-marusia-mini.dts
 cat "$recipe_dir/recovery-disable.dtsi" >> "$board_dts"
+# The inspected legacy loader ignores placement flag bit 3 and always computes
+# bd.bi_dram[0].start + low32(text_offset). Keep the header layout and entry code,
+# but emit an explicit 32 MiB load offset from source, above reserved low RAM.
+python3 - <<'PY_HEADER'
+from pathlib import Path
+path = Path('arch/arm64/kernel/head.S')
+source = path.read_text()
+old = '\t.quad\t0\t\t\t\t// Image load offset from start of RAM, little-endian'
+if source.count(old) != 1:
+    raise SystemExit('Pinned ARM64 Image load-offset field changed')
+path.write_text(source.replace(old, old.replace('.quad\t0\t', '.quad\t0x02000000\t'), 1))
+PY_HEADER
 
 make ARCH=arm64 LLVM=1 LLVM_IAS=1 tinyconfig
 scripts/config --enable ARCH_MESON --enable SMP --set-val NR_CPUS 4 \
@@ -66,26 +78,29 @@ for key, expected in [('root', '/dev/ram0'), ('rdinit', '/init'), ('init', '/ini
 PY
 make -j"${JARVIS_BUILD_JOBS:-2}" ARCH=arm64 LLVM=1 LLVM_IAS=1 Image amlogic/meson-axg-s420-marusia-mini.dtb
 mkdir -p "$work_dir/output"
-cp arch/arm64/boot/Image "$work_dir/output/Image.unpatched"
+cp arch/arm64/boot/Image "$work_dir/output/Image.axg-legacy"
 cp arch/arm64/boot/dts/amlogic/meson-axg-s420-marusia-mini.dtb "$work_dir/output/board.dtb"
 cp .config "$work_dir/output/kernel.config"
 cp "$recipe_dir/source-lock.json" "$work_dir/output/source-lock.json"
 cp "$recipe_dir/recovery-disable.dtsi" "$work_dir/output/recovery-disable.dtsi"
-git diff --binary > "$work_dir/output/board-change.patch"
+git diff --binary > "$work_dir/output/source-change.patch"
 # Complete corresponding source accompanies any binary download, including the patch.
 git archive HEAD | gzip -1 > "$work_dir/output/kernel-source.tar.gz"
 python3 - "$work_dir/output" <<'PY'
 import hashlib,json,struct,sys
 from pathlib import Path
-p=Path(sys.argv[1]); image=(p/'Image.unpatched').read_bytes()
+p=Path(sys.argv[1]); image=(p/'Image.axg-legacy').read_bytes()
 if len(image)<64 or image[56:60]!=b'ARM\x64':
     raise SystemExit('Not a raw ARM64 Image')
 if len(image)>32*1024*1024:
     raise SystemExit('Kernel exceeds diagnostic memory budget')
 text_offset,image_size,flags=struct.unpack_from('<QQQ',image,8)
+if text_offset != 0x02000000 or not flags & 8 or image_size > 16*1024*1024:
+    raise SystemExit('Unexpected legacy-loader placement or oversized runtime image')
 r={'artifact':'RAM_KERNEL_CANDIDATE_NOT_BOOT_VERIFIED','launch_allowed':False,
    'boot_command':None,'flash_command':None,'header_text_offset':text_offset,
-   'header_image_size':image_size,'header_flags':flags,'old_loader_header_patch_applied':False,
+   'header_image_size':image_size,'header_flags':flags,'old_loader_header_patch_applied':True,
+   'header_change_method':'source-only ARM64 load-offset field; no post-build binary patch',
    'files':{f.name:{'bytes':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()}
             for f in p.iterdir() if f.is_file()}}
 (p/'build-manifest.json').write_text(json.dumps(r,indent=2))

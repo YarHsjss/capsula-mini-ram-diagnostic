@@ -4,6 +4,8 @@
   "reference_branch": "vk-mini-a113x",
   "board_dts": "arch/arm64/boot/dts/amlogic/meson-axg-s420-marusia-mini.dts",
   "purpose": "RAM diagnostic kernel; no persistent storage, network or sound",
+  "legacy_loader_header_text_offset": 33554432,
+  "legacy_loader_header_change": "arch/arm64/kernel/head.S load-offset field only; keep entry instructions and header layout",
   "kernel_execution_approved": false,
   "public_inputs_only": true
 }

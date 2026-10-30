@@ -38,7 +38,7 @@
           "name": "Collect candidate and matching source",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "ram-kernel-candidate-not-boot-verified",
+            "name": "ram-kernel-legacy-loader-not-boot-verified",
             "path": "${{ runner.temp }}/jarvis-ram-build/output/",
             "retention-days": 1,
             "if-no-files-found": "error"
