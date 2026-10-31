@@ -33,6 +33,19 @@ if source.count(old) != 1:
 path.write_text(source.replace(old, old.replace('.quad\t0\t', '.quad\t0x02000000\t'), 1))
 PY_HEADER
 
+# Windows' built-in usbser.inf matches class 02/subclass 02. The upstream
+# legacy gadget otherwise advertises device subclass 00, requiring a custom
+# INF on some hosts. Set only the default ACM branch to its correct subclass.
+python3 - <<'PY_CDC'
+from pathlib import Path
+path = Path('drivers/usb/gadget/legacy/serial.c')
+source = path.read_text()
+old = '\t\tserial_config_driver.bConfigurationValue = 2;\n\t\tdevice_desc.bDeviceClass = USB_CLASS_COMM;'
+if source.count(old) != 1:
+    raise SystemExit('Pinned USB ACM device descriptor branch changed')
+path.write_text(source.replace(old, old + '\n\t\tdevice_desc.bDeviceSubClass = USB_CDC_SUBCLASS_ACM;', 1))
+PY_CDC
+
 make ARCH=arm64 LLVM=1 LLVM_IAS=1 tinyconfig
 scripts/config --enable ARCH_MESON --enable SMP --set-val NR_CPUS 4 \
     --enable ARM_PSCI_FW --enable ARM_GIC --enable ARM_GIC_V3 \
@@ -101,6 +114,7 @@ r={'artifact':'RAM_KERNEL_CANDIDATE_NOT_BOOT_VERIFIED','launch_allowed':False,
    'boot_command':None,'flash_command':None,'header_text_offset':text_offset,
    'header_image_size':image_size,'header_flags':flags,'old_loader_header_patch_applied':True,
    'header_change_method':'source-only ARM64 load-offset field; no post-build binary patch',
+   'usb_cdc_device_class':2,'usb_cdc_device_subclass':2,
    'files':{f.name:{'bytes':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()}
             for f in p.iterdir() if f.is_file()}}
 (p/'build-manifest.json').write_text(json.dumps(r,indent=2))

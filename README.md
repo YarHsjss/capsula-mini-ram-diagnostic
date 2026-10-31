@@ -10,6 +10,12 @@ configuration excludes MTD, block devices, MMC, module loading, networking and
 sound. CPU frequency scaling is disabled. The board source additionally disables
 storage and audio buses; USB serial is the intended future log transport.
 
+The default ACM gadget additionally advertises USB device class 02/subclass 02
+so Windows can match its built-in usbser.inf without a vendor installer. Only
+the ACM branch in drivers/usb/gadget/legacy/serial.c is changed; the exact patch
+and descriptor values are included in the artifact. This is preparation for a
+USB logging test, not proof of enumeration on the target.
+
 The inspected legacy U-Boot computes the destination as DRAM start plus the
 32-bit Image text_offset, ignoring the modern arbitrary-placement flag. A zero
 offset collides with the board's reserved first 16 MiB. The recipe changes only
