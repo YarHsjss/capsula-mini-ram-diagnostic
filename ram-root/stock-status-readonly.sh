@@ -21,6 +21,25 @@ printf '\n[alsa_cards]\n'
 if [ -r /proc/asound/cards ]; then show_file /proc/asound/cards; fi
 printf '\n[alsa_pcm]\n'
 if [ -r /proc/asound/pcm ]; then show_file /proc/asound/pcm; fi
+printf '\n[sdio_identity_only]\n'
+sdio_count=0
+set +f
+for device in /sys/bus/sdio/devices/*; do
+    [ -d "$device" ] || continue
+    sdio_count=$((sdio_count + 1))
+    [ "$sdio_count" -le 16 ] || break
+    printf 'sdio_device=%s\n' "${device##*/}"
+    for field in vendor device class; do
+        [ -r "$device/$field" ] || continue
+        IFS= read -r value < "$device/$field"
+        case "$value" in
+            ''|*[!0-9a-fA-FxX]*) printf '%s=invalid\n' "$field" ;;
+            *) printf '%s=%s\n' "$field" "$value" ;;
+        esac
+    done
+done
+set -f
+printf 'sdio_functions=%s\n' "$sdio_count"
 printf '\n[slot_and_root_arguments]\n'
 if [ -r /proc/cmdline ]; then
     read -r cmdline < /proc/cmdline

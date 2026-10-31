@@ -1,5 +1,12 @@
 # JARVIS Mini RAM diagnostic kernel recipe
 
+Two manual profiles are supported. `core` is the original diagnostic.
+`peripherals` enumerates the SDIO module at 25 MHz and a microphone-only ALSA
+card. It does not load a Wi-Fi/radio driver, join networks, record audio, or play
+sound. NAND and block I/O remain disabled. The amplifier is held disabled and
+in reset, its I2C bus/codec and all playback links remain disabled. Firmware,
+RF calibration and audio calibration from a real device must never be published.
+
 Prepared recipe, not a tested boot image or flasher. Publishing and running this
 recipe require the owner's approval. Only public source, configuration and build
 code belong here. Never upload a speaker backup, original firmware, initramfs

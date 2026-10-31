@@ -2,6 +2,9 @@
 # Build in an isolated Linux environment. Never run on the speaker.
 set -euo pipefail
 recipe_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+profile=${JARVIS_DIAGNOSTIC_PROFILE:-core}
+case "$profile" in core|peripherals) ;; *) printf 'Unknown diagnostic profile\n' >&2; exit 1 ;; esac
+export JARVIS_DIAGNOSTIC_PROFILE="$profile"
 work_dir=${JARVIS_BUILD_WORKDIR:?Set an empty build workspace}
 mkdir -p "$work_dir"
 if [ -e "$work_dir/kernel" ]; then
@@ -20,6 +23,52 @@ test "$(git -C "$work_dir/kernel" rev-parse HEAD)" = "$source_commit"
 cd "$work_dir/kernel"
 board_dts=arch/arm64/boot/dts/amlogic/meson-axg-s420-marusia-mini.dts
 cat "$recipe_dir/recovery-disable.dtsi" >> "$board_dts"
+if [ "$profile" = peripherals ]; then
+cat >> "$board_dts" <<'DTS_PERIPHERALS'
+
+// Discovery only: SDIO identity and microphone ALSA enumeration, no RF driver,
+// no PCM capture/playback device nodes or userspace commands, no I2C driver.
+&sd_emmc_b {
+    status = "okay";
+    max-frequency = <25000000>;
+    /delete-property/ sd-uhs-sdr104;
+    /delete-property/ cap-sd-highspeed;
+};
+&uart_A { status = "disabled"; };
+&ntp8910a { status = "disabled"; };
+&gpio {
+    amp-enable-hog {
+        /delete-property/ output-high;
+        output-low;
+    };
+    amp-reset-discovery-hog {
+        gpio-hog;
+        gpios = <GPIOA_17 GPIO_ACTIVE_LOW>;
+        output-high;
+        line-name = "amp-reset-discovery";
+    };
+};
+&frddr_a { status = "disabled"; };
+&tdmin_c { status = "disabled"; };
+&tdmin_lb { status = "disabled"; };
+&tdmout_c { status = "disabled"; };
+&tdmif_c { status = "disabled"; };
+&toddr_b { status = "disabled"; };
+/ {
+    /delete-node/ sound;
+    sound {
+        compatible = "amlogic,axg-sound-card";
+        model = "JARVIS-MIC-DISCOVERY";
+        audio-routing = "TODDR_A IN 4", "PDM Capture";
+        dai-link-0 { sound-dai = <&toddr_a>; };
+        dai-link-1 {
+            sound-dai = <&pdm>;
+            codec { sound-dai = <&dmics>; };
+        };
+    };
+};
+DTS_PERIPHERALS
+fi
 # The inspected legacy loader ignores placement flag bit 3 and always computes
 # bd.bi_dram[0].start + low32(text_offset). Keep the header layout and entry code,
 # but emit an explicit 32 MiB load offset from source, above reserved low RAM.
@@ -70,15 +119,38 @@ scripts/config --enable ARCH_MESON --enable SMP --set-val NR_CPUS 4 \
     --enable CMDLINE_FORCE --set-str INITRAMFS_SOURCE '' \
     --set-str CMDLINE 'rdinit=/init init=/init root=/dev/ram0 ro console=ttyAML0,115200n8 console=ttyGS0,115200n8 panic=0 maxcpus=1 cpufreq.off=1 clk_ignore_unused pd_ignore_unused regulator_ignore_unused' \
     --set-str LOCALVERSION '-jarvis-ram-diagnostic'
+if [ "$profile" = peripherals ]; then
+scripts/config --enable MMC --enable MMC_MESON_GX --enable PWRSEQ_SIMPLE \
+    --enable PWM --enable PWM_MESON --enable COMMON_CLK_PWM \
+    --enable SOUND --enable SND --enable SND_PCM --enable SND_SOC \
+    --enable SND_MESON_AXG_SOUND_CARD --enable SND_MESON_AXG_PDM \
+    --enable SND_MESON_AXG_TODDR --enable SND_SOC_DMIC \
+    --enable COMMON_CLK_AXG_AUDIO --enable RESET_MESON_AUDIO_ARB \
+    --disable SND_MESON_AXG_FRDDR --disable SND_MESON_AXG_TDMIN \
+    --disable SND_MESON_AXG_TDMOUT --disable SND_MESON_AXG_SPDIFOUT \
+    --disable SND_MESON_AXG_SPDIFIN --disable SND_MESON_G12A_TOACODEC \
+    --disable SND_MESON_G12A_TOHDMITX --disable SND_SOC_NTP8918 \
+    --disable SND_SOC_ALL_CODECS --disable SND_DRIVERS --disable SND_USB \
+    --disable SND_HDA --disable SND_PCI --disable SND_SEQUENCER \
+    --disable MMC_BLOCK --disable NET --disable I2C --disable SPI
+fi
 make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
 python3 - <<'PY'
+import os
 from pathlib import Path
 text = Path('.config').read_text()
 values = dict(line.split('=', 1) for line in text.splitlines() if line.startswith('CONFIG_') and '=' in line)
-for key in ['MTD','BLOCK','MMC','MODULES','NET','SOUND','I2C','SPI','CPU_FREQ','DEVTMPFS','NVMEM_MESON_EFUSE']:
+profile = os.environ.get('JARVIS_DIAGNOSTIC_PROFILE', 'core')
+if profile not in ('core', 'peripherals'):
+    raise SystemExit('Unknown diagnostic profile')
+for key in ['MTD','BLOCK','MMC_BLOCK','MODULES','NET','I2C','SPI','CPU_FREQ','DEVTMPFS','NVMEM_MESON_EFUSE','SND_SOC_NTP8918','SND_MESON_AXG_FRDDR','SND_MESON_AXG_TDMOUT','BT','W1_AML','RTW88'] + (['MMC','SOUND'] if profile == 'core' else []):
     if values.get('CONFIG_' + key) in ('y', 'm'):
         raise SystemExit('Unsafe diagnostic configuration: '+key)
 required = ['BLK_DEV_INITRD','RD_GZIP','BINFMT_ELF','BINFMT_SCRIPT','PROC_FS','SYSFS','SHMEM','TMPFS','USB_G_SERIAL','U_SERIAL_CONSOLE','USB_DWC2','ARCH_MESON','CMDLINE_FORCE']
+if profile == 'peripherals':
+    required += ['MMC','MMC_MESON_GX','PWRSEQ_SIMPLE','PWM_MESON','COMMON_CLK_PWM',
+                 'SOUND','SND_SOC','SND_MESON_AXG_SOUND_CARD','SND_MESON_AXG_PDM',
+                 'SND_MESON_AXG_TODDR','SND_SOC_DMIC','COMMON_CLK_AXG_AUDIO']
 missing = [key for key in required if values.get('CONFIG_' + key) != 'y']
 if missing:
     raise SystemExit('Missing diagnostic requirements: '+', '.join(missing))
@@ -100,7 +172,7 @@ git diff --binary > "$work_dir/output/source-change.patch"
 # Complete corresponding source accompanies any binary download, including the patch.
 git archive HEAD | gzip -1 > "$work_dir/output/kernel-source.tar.gz"
 python3 - "$work_dir/output" <<'PY'
-import hashlib,json,struct,sys
+import hashlib,json,os,struct,sys
 from pathlib import Path
 p=Path(sys.argv[1]); image=(p/'Image.axg-legacy').read_bytes()
 if len(image)<64 or image[56:60]!=b'ARM\x64':
@@ -115,6 +187,7 @@ r={'artifact':'RAM_KERNEL_CANDIDATE_NOT_BOOT_VERIFIED','launch_allowed':False,
    'header_image_size':image_size,'header_flags':flags,'old_loader_header_patch_applied':True,
    'header_change_method':'source-only ARM64 load-offset field; no post-build binary patch',
    'usb_cdc_device_class':2,'usb_cdc_device_subclass':2,
+   'diagnostic_profile':os.environ['JARVIS_DIAGNOSTIC_PROFILE'],
    'files':{f.name:{'bytes':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()}
             for f in p.iterdir() if f.is_file()}}
 (p/'build-manifest.json').write_text(json.dumps(r,indent=2))

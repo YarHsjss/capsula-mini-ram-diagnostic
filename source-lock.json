@@ -10,4 +10,8 @@
   "usb_cdc_source_change": "drivers/usb/gadget/legacy/serial.c: default ACM branch advertises class 02/subclass 02 for Windows in-box usbser",
   "kernel_execution_approved": false,
   "public_inputs_only": true
+  ,"profiles": {
+    "core": "Storage/network/audio disabled; initial RAM diagnostic",
+    "peripherals": "SDIO identity at 25 MHz and PDM ALSA enumeration; BLOCK/MTD/network/I2C disabled, speaker held disabled/reset, no PCM capture or playback"
+  }
 }

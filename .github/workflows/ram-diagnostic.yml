@@ -1,7 +1,7 @@
 {
   "name": "RAM diagnostic kernel (not a flasher)",
   "on": {
-    "workflow_dispatch": {}
+    "workflow_dispatch": {"inputs":{"profile":{"description":"Diagnostic profile (no persistent storage writes)","required":true,"default":"core","type":"choice","options":["core","peripherals"]}}}
   },
   "permissions": {
     "contents": "read"
@@ -31,6 +31,7 @@
           "env": {
             "JARVIS_BUILD_WORKDIR": "${{ runner.temp }}/jarvis-ram-build",
             "JARVIS_BUILD_JOBS": "3"
+            ,"JARVIS_DIAGNOSTIC_PROFILE": "${{ inputs.profile || 'core' }}"
           },
           "run": "bash build-recovery-kernel.sh"
         },
@@ -38,7 +39,7 @@
           "name": "Collect candidate and matching source",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "ram-kernel-legacy-loader-not-boot-verified",
+            "name": "ram-kernel-${{ inputs.profile || 'core' }}-not-boot-verified",
             "path": "${{ runner.temp }}/jarvis-ram-build/output/",
             "retention-days": 1,
             "if-no-files-found": "error"
